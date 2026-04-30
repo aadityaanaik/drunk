@@ -47,10 +47,15 @@ class PhoneConnectivityManager: NSObject, ObservableObject, WCSessionDelegate {
     }
 
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
-        guard let deviceID = userInfo["device_id"] as? String,
-              let rawEvents = userInfo["events"] as? [[String: Double]],
-              let body = try? JSONSerialization.data(withJSONObject: ["device_id": deviceID, "events": rawEvents])
-        else { return }
+        guard let deviceID = userInfo["device_id"] as? String else { return }
+        let rawEvents = userInfo["events"] as? [[String: Double]] ?? []
+        let deletions = userInfo["deletions"] as? [Double] ?? []
+
+        guard !rawEvents.isEmpty || !deletions.isEmpty else { return }
+
+        var bodyDict: [String: Any] = ["device_id": deviceID, "events": rawEvents]
+        if !deletions.isEmpty { bodyDict["deletions"] = deletions }
+        guard let body = try? JSONSerialization.data(withJSONObject: bodyDict) else { return }
 
         // Persist before attempting — survives app termination between enqueue and send.
         var queue = pendingQueue

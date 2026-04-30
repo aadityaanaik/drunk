@@ -39,6 +39,12 @@ async def insert_events(device_id: str, events) -> None:
     get_client().table("drink_events").upsert(rows, ignore_duplicates=True, on_conflict="device_id,timestamp").execute()
 
 
+async def delete_events(device_id: str, timestamps: list[float]) -> None:
+    for ts in timestamps:
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        get_client().table("drink_events").delete().eq("device_id", device_id).eq("timestamp", dt).execute()
+
+
 async def get_today_events(device_id: str) -> list:
     today = datetime.now(timezone.utc).date().isoformat()
     result = (

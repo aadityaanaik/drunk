@@ -34,7 +34,9 @@ class BatchSender: NSObject, ObservableObject, WCSessionDelegate {
         }
 
         let events = store.flushEvents()
-        guard !events.isEmpty else { return }
+        let deletions = store.flushDeletions()
+
+        guard !events.isEmpty || !deletions.isEmpty else { return }
 
         do {
             try validateSession()
@@ -44,16 +46,20 @@ class BatchSender: NSObject, ObservableObject, WCSessionDelegate {
             return
         }
 
-        // Chunk into groups of 50 to stay within WCSession payload size limits.
         let id = deviceID()
-        let chunks = stride(from: 0, to: events.count, by: 50).map {
+
+        // Chunk events into groups of 50; deletions ride along with the first chunk.
+        let chunks = events.isEmpty ? [[DrinkEvent]()] : stride(from: 0, to: events.count, by: 50).map {
             Array(events[$0 ..< min($0 + 50, events.count)])
         }
-        for chunk in chunks {
-            let payload: [String: Any] = [
+        for (i, chunk) in chunks.enumerated() {
+            var payload: [String: Any] = [
                 "device_id": id,
                 "events": chunk.map { ["timestamp": $0.timestamp.timeIntervalSince1970, "confidence": $0.confidence, "volume_oz": $0.volumeOz] }
             ]
+            if i == 0, !deletions.isEmpty {
+                payload["deletions"] = deletions
+            }
             WCSession.default.transferUserInfo(payload)
         }
         syncError = nil
