@@ -27,7 +27,8 @@ async def insert_events(device_id: str, events) -> None:
         }
         for e in events
     ]
-    get_client().table("drink_events").insert(rows).execute()
+    # ignore_duplicates=True → INSERT ... ON CONFLICT DO NOTHING, safe for retries.
+    get_client().table("drink_events").upsert(rows, ignore_duplicates=True, on_conflict="device_id,timestamp").execute()
 
 
 async def get_today_events(device_id: str) -> list:
