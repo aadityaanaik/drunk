@@ -45,6 +45,14 @@ struct ContentView: View {
                         .padding(.horizontal)
                 }
 
+                if let err = appState.motionManager.motionError ?? appState.batchSender.syncError {
+                    Text(err)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+
                 HStack(spacing: 8) {
                     Button(appState.motionManager.isRunning ? "Stop" : "Start") {
                         if appState.motionManager.isRunning {
