@@ -5,6 +5,8 @@ class MotionManager: ObservableObject {
     private let cmManager = CMMotionManager()
     private let detector: DrinkDetector
     private let store: DrinkStore
+    // Nil when DrinkGestureClassifier.mlmodel has not been added to the Xcode project yet.
+    private let classifier: DrinkClassifier? = DrinkClassifier()
 
     @Published var currentPitch: Double = 0.0
     @Published var isRunning: Bool = false
@@ -55,9 +57,12 @@ class MotionManager: ObservableObject {
             self.consecutiveErrors = 0
             self.motionError = nil
             self.currentPitch = pitch
-            if let event = self.detector.update(pitch: pitch, roll: roll) {
-                self.store.addEvent(event)
-            }
+
+            // Prefer the CoreML classifier when the model is available;
+            // fall back to the rule-based detector otherwise.
+            let event = self.classifier?.update(motion: motion)
+                     ?? self.detector.update(pitch: pitch, roll: roll)
+            if let event { self.store.addEvent(event) }
         }
         isRunning = true
     }
