@@ -41,10 +41,12 @@ class MotionManager: ObservableObject {
 
             guard let motion else { return }
 
-            // Sanity-check: pitch is bounded to [-π, π]; values outside that
-            // indicate a sensor fault and should be skipped.
+            // Sanity-check: pitch and roll are bounded to [-π, π]; values outside
+            // that indicate a sensor fault and should be skipped.
             let pitch = motion.attitude.pitch
-            guard pitch.isFinite, abs(pitch) <= .pi else { return }
+            let roll = motion.attitude.roll
+            guard pitch.isFinite, abs(pitch) <= .pi,
+                  roll.isFinite,  abs(roll)  <= .pi else { return }
 
             // gravity.z ≈ -1 means the watch face is pointing up (user lying flat).
             // Gesture detection is unreliable in that posture, so skip it.
@@ -53,7 +55,7 @@ class MotionManager: ObservableObject {
             self.consecutiveErrors = 0
             self.motionError = nil
             self.currentPitch = pitch
-            if let event = self.detector.update(pitch: pitch) {
+            if let event = self.detector.update(pitch: pitch, roll: roll) {
                 self.store.addEvent(event)
             }
         }
