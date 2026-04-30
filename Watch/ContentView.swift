@@ -39,10 +39,15 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
 
                 if let insights = appState.drinkStore.latestInsights {
-                    Text(insights.message)
-                        .font(.caption2)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+                    VStack(spacing: 4) {
+                        Text(String(format: "%.1f oz  /  %.0f ml", insights.total_oz, insights.total_ml))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        Text(insights.message)
+                            .font(.caption2)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
                 }
 
                 if let err = appState.motionManager.motionError ?? appState.batchSender.syncError {

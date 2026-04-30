@@ -14,6 +14,12 @@ class DrinkDetector {
     private let holdDuration: TimeInterval = 0.4
     private let cooldownDuration: TimeInterval = 3.0
 
+    // Volume estimation: 2 oz/s of hold time, floored at 2 oz (minimum detectable sip).
+    // No upper cap — a long continuous drink should be measured as-is.
+    // False positives are already guarded by the pitch thresholds and 3s cooldown.
+    private let ozPerSecond: Double = 2.0
+    private let minOz: Double = 2.0
+
     func update(pitch: Double) -> DrinkEvent? {
         let now = Date()
         switch state {
@@ -25,7 +31,8 @@ class DrinkDetector {
                 let held = now.timeIntervalSince(since)
                 if held >= holdDuration {
                     state = .cooldown(until: now.addingTimeInterval(cooldownDuration))
-                    return DrinkEvent(timestamp: now, confidence: min(held / 2.0, 1.0))
+                    let volumeOz = max(held * ozPerSecond, minOz)
+                    return DrinkEvent(timestamp: now, confidence: min(held / 2.0, 1.0), volumeOz: volumeOz)
                 } else {
                     state = .idle
                 }
