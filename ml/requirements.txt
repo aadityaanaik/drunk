@@ -1,0 +1,6 @@
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.4
+imbalanced-learn>=0.12   # SMOTE for class balancing
+coremltools>=7.2
+requests>=2.31

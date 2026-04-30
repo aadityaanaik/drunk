@@ -1,11 +1,44 @@
 import os
 import json
-from anthropic import Anthropic
+import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
 
-_client = Anthropic()
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
+
+_PROMPT_TEMPLATE = """\
+You are a hydration assistant. Analyze this drinking data and return ONLY valid JSON — no markdown, no explanation.
+
+Today's drink events (UTC timestamps): {timestamps}
+Total drinks today: {today_count}
+Total volume today: {total_oz} oz ({total_ml} ml)
+Daily goal: {goal} drinks
+
+Return a JSON object with exactly these fields:
+- today_count: integer
+- goal: integer
+- total_oz: number (pass through the value provided above)
+- total_ml: number (pass through the value provided above)
+- message: short motivational message mentioning volume (max 20 words)
+- pattern: one of "regular", "front-loaded", "back-loaded", "irregular", "none"
+"""
+
+
+async def _ollama_chat(prompt: str) -> str:
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            f"{OLLAMA_URL}/api/chat",
+            json={
+                "model": OLLAMA_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+                "format": "json",   # Ollama JSON mode — forces valid JSON output
+            },
+        )
+        response.raise_for_status()
+        return response.json()["message"]["content"]
 
 
 async def generate_insights(events: list) -> dict:
@@ -25,32 +58,8 @@ async def generate_insights(events: list) -> dict:
             "pattern": "none",
         }
 
-    # Cap at 200 timestamps to keep the prompt well under token limits.
+    # Cap at 200 timestamps to keep the prompt well under context limits.
     timestamps = [e["timestamp"] for e in events[:200]]
-
-    response = _client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=256,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    f"You are a hydration assistant. Analyze this drinking data and return ONLY valid JSON.\n\n"
-                    f"Today's drink events (UTC timestamps): {timestamps}\n"
-                    f"Total drinks today: {today_count}\n"
-                    f"Total volume today: {total_oz} oz ({total_ml} ml)\n"
-                    f"Daily goal: {goal} drinks\n\n"
-                    f"Return a JSON object with:\n"
-                    f'- today_count: integer\n'
-                    f'- goal: integer\n'
-                    f'- total_oz: number (pass through the value provided)\n'
-                    f'- total_ml: number (pass through the value provided)\n'
-                    f'- message: short motivational message mentioning volume (max 20 words)\n'
-                    f'- pattern: one of "regular", "front-loaded", "back-loaded", "irregular", "none"'
-                ),
-            }
-        ],
-    )
 
     fallback = {
         "today_count": today_count,
@@ -62,9 +71,17 @@ async def generate_insights(events: list) -> dict:
     }
 
     try:
-        raw = json.loads(response.content[0].text.strip())
+        prompt = _PROMPT_TEMPLATE.format(
+            timestamps=timestamps,
+            today_count=today_count,
+            total_oz=total_oz,
+            total_ml=total_ml,
+            goal=goal,
+        )
+        raw_text = await _ollama_chat(prompt)
+        raw = json.loads(raw_text)
         return _coerce_insights(raw, fallback)
-    except (json.JSONDecodeError, Exception):
+    except Exception:
         return fallback
 
 
@@ -72,7 +89,6 @@ _VALID_PATTERNS = {"regular", "front-loaded", "back-loaded", "irregular", "none"
 
 
 def _coerce_insights(raw: dict, fallback: dict) -> dict:
-    """Coerce Claude's response to the expected types, falling back field-by-field."""
     def _int(key: str) -> int:
         try:
             return max(int(raw[key]), 0)
@@ -88,7 +104,7 @@ def _coerce_insights(raw: dict, fallback: dict) -> dict:
     pattern = raw.get("pattern", fallback["pattern"])
     return {
         "today_count": _int("today_count"),
-        "goal": max(_int("goal"), 1),          # guard goal=0 on the server side too
+        "goal": max(_int("goal"), 1),
         "total_oz": _float("total_oz"),
         "total_ml": _float("total_ml"),
         "message": str(raw.get("message", fallback["message"]))[:120],
