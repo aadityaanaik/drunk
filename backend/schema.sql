@@ -3,7 +3,7 @@ CREATE TABLE drink_events (
     device_id   TEXT             NOT NULL,
     timestamp   TIMESTAMPTZ      NOT NULL,
     confidence  DOUBLE PRECISION NOT NULL DEFAULT 1.0,
-    -- Volume estimated from wrist-raise hold duration (2 oz/s, clamped 2–12 oz)
+    -- Volume estimated from wrist-raise hold duration (2 oz/s, floored at 2 oz, no upper cap)
     volume_oz   DOUBLE PRECISION NOT NULL DEFAULT 8.0,
     volume_ml   DOUBLE PRECISION NOT NULL DEFAULT 236.59,  -- volume_oz * 29.5735
     created_at  TIMESTAMPTZ      NOT NULL DEFAULT now(),
