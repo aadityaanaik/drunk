@@ -1,4 +1,5 @@
 import os
+import threading
 from datetime import datetime, timezone
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -6,15 +7,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 _client: Client | None = None
+_client_lock = threading.Lock()
 
 
 def get_client() -> Client:
     global _client
-    if _client is None:
-        _client = create_client(
-            os.environ["SUPABASE_URL"],
-            os.environ["SUPABASE_SERVICE_KEY"],
-        )
+    with _client_lock:
+        if _client is None:
+            _client = create_client(
+                os.environ["SUPABASE_URL"],
+                os.environ["SUPABASE_SERVICE_KEY"],
+            )
     return _client
 
 
