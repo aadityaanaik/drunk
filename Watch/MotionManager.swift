@@ -46,6 +46,10 @@ class MotionManager: ObservableObject {
             let pitch = motion.attitude.pitch
             guard pitch.isFinite, abs(pitch) <= .pi else { return }
 
+            // gravity.z ≈ -1 means the watch face is pointing up (user lying flat).
+            // Gesture detection is unreliable in that posture, so skip it.
+            guard motion.gravity.z > -0.7 else { return }
+
             self.consecutiveErrors = 0
             self.motionError = nil
             self.currentPitch = pitch

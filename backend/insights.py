@@ -25,7 +25,8 @@ async def generate_insights(events: list) -> dict:
             "pattern": "none",
         }
 
-    timestamps = [e["timestamp"] for e in events]
+    # Cap at 200 timestamps to keep the prompt well under token limits.
+    timestamps = [e["timestamp"] for e in events[:200]]
 
     response = _client.messages.create(
         model="claude-haiku-4-5-20251001",
@@ -51,14 +52,45 @@ async def generate_insights(events: list) -> dict:
         ],
     )
 
+    fallback = {
+        "today_count": today_count,
+        "goal": goal,
+        "total_oz": total_oz,
+        "total_ml": total_ml,
+        "message": "Keep up the good work!",
+        "pattern": "regular",
+    }
+
     try:
-        return json.loads(response.content[0].text.strip())
-    except json.JSONDecodeError:
-        return {
-            "today_count": today_count,
-            "goal": goal,
-            "total_oz": total_oz,
-            "total_ml": total_ml,
-            "message": "Keep up the good work!",
-            "pattern": "regular",
-        }
+        raw = json.loads(response.content[0].text.strip())
+        return _coerce_insights(raw, fallback)
+    except (json.JSONDecodeError, Exception):
+        return fallback
+
+
+_VALID_PATTERNS = {"regular", "front-loaded", "back-loaded", "irregular", "none"}
+
+
+def _coerce_insights(raw: dict, fallback: dict) -> dict:
+    """Coerce Claude's response to the expected types, falling back field-by-field."""
+    def _int(key: str) -> int:
+        try:
+            return max(int(raw[key]), 0)
+        except (KeyError, TypeError, ValueError):
+            return fallback[key]
+
+    def _float(key: str) -> float:
+        try:
+            return float(raw[key])
+        except (KeyError, TypeError, ValueError):
+            return fallback[key]
+
+    pattern = raw.get("pattern", fallback["pattern"])
+    return {
+        "today_count": _int("today_count"),
+        "goal": max(_int("goal"), 1),          # guard goal=0 on the server side too
+        "total_oz": _float("total_oz"),
+        "total_ml": _float("total_ml"),
+        "message": str(raw.get("message", fallback["message"]))[:120],
+        "pattern": pattern if pattern in _VALID_PATTERNS else fallback["pattern"],
+    }

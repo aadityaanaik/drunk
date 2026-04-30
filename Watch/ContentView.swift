@@ -7,7 +7,7 @@ struct ContentView: View {
 
     private var todayCount: Int { appState.drinkStore.todayCount }
     private var pendingCount: Int { appState.drinkStore.pendingEvents.count }
-    private var progress: Double { min(Double(todayCount) / Double(goal), 1.0) }
+    private var progress: Double { goal > 0 ? min(Double(todayCount) / Double(goal), 1.0) : 0.0 }
 
     var body: some View {
         ScrollView {

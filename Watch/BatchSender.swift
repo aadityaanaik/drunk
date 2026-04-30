@@ -36,22 +36,27 @@ class BatchSender: NSObject, ObservableObject, WCSessionDelegate {
         let events = store.flushEvents()
         guard !events.isEmpty else { return }
 
-        let payload: [String: Any] = [
-            "device_id": deviceID(),
-            "events": events.map { ["timestamp": $0.timestamp.timeIntervalSince1970, "confidence": $0.confidence, "volume_oz": $0.volumeOz] }
-        ]
-
-        // transferUserInfo guarantees delivery but can throw if the session is
-        // in an unexpected state (e.g. watch app not installed).
         do {
             try validateSession()
-            WCSession.default.transferUserInfo(payload)
-            syncError = nil
         } catch {
-            // Re-queue events so they are not lost
             events.forEach { store.addEvent($0) }
             syncError = "Sync failed: \(error.localizedDescription)"
+            return
         }
+
+        // Chunk into groups of 50 to stay within WCSession payload size limits.
+        let id = deviceID()
+        let chunks = stride(from: 0, to: events.count, by: 50).map {
+            Array(events[$0 ..< min($0 + 50, events.count)])
+        }
+        for chunk in chunks {
+            let payload: [String: Any] = [
+                "device_id": id,
+                "events": chunk.map { ["timestamp": $0.timestamp.timeIntervalSince1970, "confidence": $0.confidence, "volume_oz": $0.volumeOz] }
+            ]
+            WCSession.default.transferUserInfo(payload)
+        }
+        syncError = nil
     }
 
     // MARK: - WCSessionDelegate

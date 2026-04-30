@@ -18,6 +18,7 @@ struct Insights: Codable {
 class DrinkStore: ObservableObject {
     private let eventsKey = "drunk.pendingEvents"
     private let insightsKey = "drunk.latestInsights"
+    private let insightsDateKey = "drunk.insightsDate"
 
     @Published private(set) var pendingEvents: [DrinkEvent] = []
     @Published private(set) var latestInsights: Insights?
@@ -45,6 +46,7 @@ class DrinkStore: ObservableObject {
 
     func updateInsights(_ insights: Insights) {
         latestInsights = insights
+        UserDefaults.standard.set(todayDateString(), forKey: insightsDateKey)
         saveInsights()
     }
 
@@ -63,8 +65,20 @@ class DrinkStore: ObservableObject {
     }
 
     private func loadInsights() {
-        guard let data = UserDefaults.standard.data(forKey: insightsKey),
-              let insights = try? JSONDecoder().decode(Insights.self, from: data) else { return }
+        // Discard insights saved on a previous day so stale totals never show.
+        guard UserDefaults.standard.string(forKey: insightsDateKey) == todayDateString(),
+              let data = UserDefaults.standard.data(forKey: insightsKey),
+              let insights = try? JSONDecoder().decode(Insights.self, from: data) else {
+            latestInsights = nil
+            return
+        }
         latestInsights = insights
+    }
+
+    private func todayDateString() -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        fmt.timeZone = .current
+        return fmt.string(from: Date())
     }
 }
