@@ -18,12 +18,17 @@ def get_client() -> Client:
     return _client
 
 
+ML_PER_OZ = 29.5735
+
+
 async def insert_events(device_id: str, events) -> None:
     rows = [
         {
             "device_id": device_id,
             "timestamp": datetime.fromtimestamp(e.timestamp, tz=timezone.utc).isoformat(),
             "confidence": e.confidence,
+            "volume_oz": e.volume_oz,
+            "volume_ml": round(e.volume_oz * ML_PER_OZ, 2),
         }
         for e in events
     ]
@@ -36,7 +41,7 @@ async def get_today_events(device_id: str) -> list:
     result = (
         get_client()
         .table("drink_events")
-        .select("timestamp, confidence")
+        .select("timestamp, confidence, volume_oz, volume_ml")
         .eq("device_id", device_id)
         .gte("timestamp", today)
         .order("timestamp", desc=True)

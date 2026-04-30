@@ -38,7 +38,7 @@ class BatchSender: NSObject, ObservableObject, WCSessionDelegate {
 
         let payload: [String: Any] = [
             "device_id": deviceID(),
-            "events": events.map { ["timestamp": $0.timestamp.timeIntervalSince1970, "confidence": $0.confidence] }
+            "events": events.map { ["timestamp": $0.timestamp.timeIntervalSince1970, "confidence": $0.confidence, "volume_oz": $0.volumeOz] }
         ]
 
         // transferUserInfo guarantees delivery but can throw if the session is

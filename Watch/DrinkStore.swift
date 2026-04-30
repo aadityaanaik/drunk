@@ -3,6 +3,7 @@ import Foundation
 struct DrinkEvent: Codable {
     let timestamp: Date
     let confidence: Double
+    let volumeOz: Double
 }
 
 struct Insights: Codable {
@@ -10,6 +11,8 @@ struct Insights: Codable {
     let goal: Int
     let message: String
     let pattern: String
+    let total_oz: Double
+    let total_ml: Double
 }
 
 class DrinkStore: ObservableObject {

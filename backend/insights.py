@@ -12,10 +12,15 @@ async def generate_insights(events: list) -> dict:
     goal = int(os.environ.get("DAILY_DRINK_GOAL", "8"))
     today_count = len(events)
 
+    total_oz = round(sum(e.get("volume_oz", 8.0) for e in events), 2)
+    total_ml = round(sum(e.get("volume_ml", 236.59) for e in events), 2)
+
     if not events:
         return {
             "today_count": 0,
             "goal": goal,
+            "total_oz": 0.0,
+            "total_ml": 0.0,
             "message": "No drinks logged today. Stay hydrated!",
             "pattern": "none",
         }
@@ -32,11 +37,14 @@ async def generate_insights(events: list) -> dict:
                     f"You are a hydration assistant. Analyze this drinking data and return ONLY valid JSON.\n\n"
                     f"Today's drink events (UTC timestamps): {timestamps}\n"
                     f"Total drinks today: {today_count}\n"
+                    f"Total volume today: {total_oz} oz ({total_ml} ml)\n"
                     f"Daily goal: {goal} drinks\n\n"
                     f"Return a JSON object with:\n"
                     f'- today_count: integer\n'
                     f'- goal: integer\n'
-                    f'- message: short motivational message (max 20 words)\n'
+                    f'- total_oz: number (pass through the value provided)\n'
+                    f'- total_ml: number (pass through the value provided)\n'
+                    f'- message: short motivational message mentioning volume (max 20 words)\n'
                     f'- pattern: one of "regular", "front-loaded", "back-loaded", "irregular", "none"'
                 ),
             }
@@ -49,6 +57,8 @@ async def generate_insights(events: list) -> dict:
         return {
             "today_count": today_count,
             "goal": goal,
+            "total_oz": total_oz,
+            "total_ml": total_ml,
             "message": "Keep up the good work!",
             "pattern": "regular",
         }

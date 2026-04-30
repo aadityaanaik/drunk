@@ -11,6 +11,7 @@ app = FastAPI(title="drunk")
 class DrinkEventIn(BaseModel):
     timestamp: float
     confidence: float
+    volume_oz: float = 8.0  # fallback for older clients that don't send volume
 
 
 class EventBatch(BaseModel):
