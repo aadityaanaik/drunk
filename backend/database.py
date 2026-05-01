@@ -1,59 +1,69 @@
 import os
-import threading
 from datetime import datetime, timezone
-from supabase import create_client, Client
+
+import asyncpg
 from dotenv import load_dotenv
 
 load_dotenv()
 
-_client: Client | None = None
-_client_lock = threading.Lock()
-
-
-def get_client() -> Client:
-    global _client
-    with _client_lock:
-        if _client is None:
-            _client = create_client(
-                os.environ["SUPABASE_URL"],
-                os.environ["SUPABASE_SERVICE_KEY"],
-            )
-    return _client
-
-
 ML_PER_OZ = 29.5735
+
+_pool: asyncpg.Pool | None = None
+
+
+async def get_pool() -> asyncpg.Pool:
+    global _pool
+    if _pool is None:
+        _pool = await asyncpg.create_pool(os.environ["DATABASE_URL"], min_size=1, max_size=10)
+    return _pool
 
 
 async def insert_events(device_id: str, events) -> None:
+    pool = await get_pool()
     rows = [
-        {
-            "device_id": device_id,
-            "timestamp": datetime.fromtimestamp(e.timestamp, tz=timezone.utc).isoformat(),
-            "confidence": e.confidence,
-            "volume_oz": e.volume_oz,
-            "volume_ml": round(e.volume_oz * ML_PER_OZ, 2),
-        }
+        (
+            device_id,
+            datetime.fromtimestamp(e.timestamp, tz=timezone.utc),
+            e.confidence,
+            e.volume_oz,
+            round(e.volume_oz * ML_PER_OZ, 2),
+        )
         for e in events
     ]
-    # ignore_duplicates=True → INSERT ... ON CONFLICT DO NOTHING, safe for retries.
-    get_client().table("drink_events").upsert(rows, ignore_duplicates=True, on_conflict="device_id,timestamp").execute()
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO drink_events (device_id, timestamp, confidence, volume_oz, volume_ml)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (device_id, timestamp) DO NOTHING
+            """,
+            rows,
+        )
 
 
 async def delete_events(device_id: str, timestamps: list[float]) -> None:
-    for ts in timestamps:
-        dt = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
-        get_client().table("drink_events").delete().eq("device_id", device_id).eq("timestamp", dt).execute()
+    pool = await get_pool()
+    dts = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in timestamps]
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM drink_events WHERE device_id = $1 AND timestamp = ANY($2::timestamptz[])",
+            device_id,
+            dts,
+        )
 
 
 async def get_today_events(device_id: str) -> list:
-    today = datetime.now(timezone.utc).date().isoformat()
-    result = (
-        get_client()
-        .table("drink_events")
-        .select("timestamp, confidence, volume_oz, volume_ml")
-        .eq("device_id", device_id)
-        .gte("timestamp", today)
-        .order("timestamp", desc=True)
-        .execute()
-    )
-    return result.data
+    pool = await get_pool()
+    today = datetime.now(timezone.utc).date()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT timestamp, confidence, volume_oz, volume_ml
+            FROM drink_events
+            WHERE device_id = $1 AND timestamp >= $2
+            ORDER BY timestamp DESC
+            """,
+            device_id,
+            datetime(today.year, today.month, today.day, tzinfo=timezone.utc),
+        )
+    return [dict(r) for r in rows]
